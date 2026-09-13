@@ -1,0 +1,6 @@
+.env
+__pycache__/
+data/bot.log*
+data/backup/
+data/backup/
+cover.jpg

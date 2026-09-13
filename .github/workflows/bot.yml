@@ -1,0 +1,87 @@
+name: iran-bot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "35 */6 * * *"
+
+concurrency:
+  group: iran-bot
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.DEPLOY_PAT }}
+          fetch-depth: 0
+
+      - name: Install
+        run: python3 -c "import requests" 2>/dev/null || python3 -m pip install --quiet --disable-pip-version-check requests
+
+      - name: Pull latest game data
+        run: |
+          git config user.name "iran-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git pull --rebase origin main || true
+
+      - name: Verify secret
+        id: verify
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          if [ -z "$BOT_TOKEN" ]; then
+            echo "::error::BOT_TOKEN secret خالی است!"
+            exit 1
+          fi
+          echo "secret OK (${#BOT_TOKEN} chars)"
+
+      - name: Run bot (~5h 50m)
+        id: bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          for i in 1 2 3 4 5; do
+            echo "── attempt $i ──"
+            timeout 20400 python3 -u bot.py
+            code=$?
+            echo "bot exit=$code"
+            if [ "$code" -eq 0 ] || [ "$code" -eq 124 ]; then break; fi
+            sleep 15
+          done
+          exit 0
+
+      - name: Save game data
+        if: always()
+        run: |
+          git add data 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "no data changes"
+          else
+            git commit -m "💾 game data [skip ci]"
+            ok=0
+            for i in 1 2 3; do
+              if git pull --rebase origin main && git push origin main; then ok=1; break; fi
+              git rebase --abort 2>/dev/null || true
+              sleep 10
+            done
+            if [ "$ok" -ne 1 ]; then echo "::warning::data save failed after 3 tries"; fi
+          fi
+
+      - name: Chain next run
+        if: always() && steps.verify.outcome == 'success'
+        env:
+          DEPLOY_PAT: ${{ secrets.DEPLOY_PAT }}
+        run: |
+          QUEUED=$(curl -s -H "Authorization: Bearer $DEPLOY_PAT" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/bot.yml/runs?status=queued&per_page=1" \
+            | python3 -c "import sys,json;print(json.load(sys.stdin).get('total_count',0))")
+          if [ "$QUEUED" != "0" ]; then echo "next run already queued"; exit 0; fi
+          curl -s -X POST -H "Authorization: Bearer $DEPLOY_PAT" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/bot.yml/dispatches" \
+            -d '{"ref":"main"}'
+          echo "next run dispatched"

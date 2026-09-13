@@ -1,0 +1,5 @@
+data/backup
+data/bot.log
+logs
+.git
+*.md

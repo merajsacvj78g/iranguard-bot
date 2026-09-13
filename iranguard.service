@@ -1,0 +1,18 @@
+[Unit]
+Description=Iran Collapse Telegram Bot (@Iran_war1bot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/user/iranguard
+ExecStart=/usr/bin/python3 -u /home/user/iranguard/bot.py
+Restart=always
+RestartSec=3
+EnvironmentFile=/home/user/iranguard/.env
+StandardOutput=append:/var/log/iranguard.log
+StandardError=append:/var/log/iranguard.err.log
+
+[Install]
+WantedBy=multi-user.target
