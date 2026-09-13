@@ -4083,7 +4083,7 @@ def main():
     me = tg("getMe")
     if not me.get("ok"):
         print("توکن نامعتبر:", me.get("description")); sys.exit(1)
-    print("▶ Bot: @" + (me["result"].get("username") or "") + " | CROWN-WARS v6.43")
+    print("▶ Bot: @" + (me["result"].get("username") or "") + " | CROWN-WARS v6.45")
     def _bye(sg, fr):
         try:
             bdir = os.path.join(DATA, "backup"); os.makedirs(bdir, exist_ok=True)
@@ -4099,11 +4099,14 @@ def main():
     print("▶ polling…")
     off = 0; lastsave = time.time()
     allowed = ["message", "callback_query", "pre_checkout_query", "my_chat_member"]
-    while True:
-        r = tg("getUpdates", offset=off, timeout=50, allowed_updates=allowed)
-        for u in (r.get("result") or [] if r.get("ok") else []):
-            off = u["update_id"] + 1
-            try:
+    _seen = set()
+    def _handle(u):
+        uid_ = u["update_id"]
+        if uid_ in _seen: return
+        _seen.add(uid_)
+        if len(_seen) > 2000:
+            for _k in list(_seen)[:1000]: _seen.discard(_k)
+        try:
                 if "message" in u: on_msg(u["message"])
                 elif "callback_query" in u: on_cb(u["callback_query"])
                 elif "my_chat_member" in u:
@@ -4118,9 +4121,25 @@ def main():
                 elif "pre_checkout_query" in u:
                     pc = u["pre_checkout_query"]
                     tg("answerPreCheckoutQuery", pre_checkout_query_id=pc.get("id"), ok=True)
-            except Exception:
+        except Exception:
                 traceback.print_exc()
                 LOG.exception("خطای پردازش")
+    last_sweep = 0.0
+    while True:
+        r = tg("getUpdates", offset=off, timeout=50, allowed_updates=allowed)
+        for u in (r.get("result") or [] if r.get("ok") else []):
+            off = u["update_id"] + 1
+            _handle(u)
+        if time.time() - last_sweep > 25:
+            last_sweep = time.time()
+            try:
+                rs2 = tg("getUpdates", offset=max(0, off - 30), timeout=0, limit=100, allowed_updates=allowed)
+                if rs2.get("ok"):
+                    for u2 in (rs2.get("result") or []):
+                        if u2["update_id"] < off:
+                            _handle(u2)
+            except Exception:
+                traceback.print_exc()
         if _DIRTY[0] and time.time() - lastsave > 8:
             with _lock:
                 save_all(); _DIRTY[0] = False
