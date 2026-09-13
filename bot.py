@@ -3752,10 +3752,15 @@ def on_msg(m):
             cid = int(gid)
             if txt.startswith("/start") or c in ("شروع", "شروع بازی", "استارت", "استارت بازی"):
                 if first or not p.get("ident"):
-                    tg("sendMessage", chat_id=cid, parse_mode="HTML",
-                       text="🌍 <b>یک دنیای مستقل برای این گروه ساخته شد!</b>\nهر گروه ایران خودش را دارد - پول، شهرها، جنگ و تصمیم‌ها با هیچ گروه دیگری قاطی نمی‌شود.\nفرمانده، اول مسیر سیاسی را انتخاب کن 👇",
-                       reply_markup=None)
-                    show_sub(cid, p, ident_text(p), ident_kb(p))
+                    _intro = ("🌍 <b>یک دنیای مستقل برای این گروه ساخته شد!</b>\n"
+                              "هر گروه ایران خودش را دارد - پول، شهرها، جنگ و تصمیم‌ها با هیچ گروه دیگری قاطی نمی‌شود.\n\n")
+                    r1 = tg("sendMessage", chat_id=cid, parse_mode="HTML",
+                            text=_intro + ident_text(p), reply_markup=ident_kb(p))
+                    if r1.get("ok"):
+                        with _lock:
+                            p.setdefault("subs", {})[str(cid)] = r1["result"]["message_id"]
+                    else:
+                        show_sub(cid, p, ident_text(p), ident_kb(p))
                 else:
                     close_sub(cid, p); show_menu(p, cid)
                 return
@@ -3801,7 +3806,11 @@ def on_msg(m):
                             files={"photo": ("cover.jpg", COVER)})
                     sent = bool(r.get("ok"))
                 if not sent:
-                    tg("sendMessage", chat_id=int(uid), parse_mode="HTML", text=cap, reply_markup=None)
+                    r1 = tg("sendMessage", chat_id=int(uid), parse_mode="HTML", text=cap + "\n\n" + ident_text(p), reply_markup=ident_kb(p))
+                    if r1.get("ok"):
+                        with _lock:
+                            p.setdefault("subs", {})[str(uid)] = r1["result"]["message_id"]
+                        return
                 show_sub(int(uid), p, ident_text(p), ident_kb(p)); return
             if not p.get("ident"):
                 show_sub(int(uid), p, ident_text(p), ident_kb(p)); return
@@ -4083,7 +4092,7 @@ def main():
     me = tg("getMe")
     if not me.get("ok"):
         print("توکن نامعتبر:", me.get("description")); sys.exit(1)
-    print("▶ Bot: @" + (me["result"].get("username") or "") + " | CROWN-WARS v6.45")
+    print("▶ Bot: @" + (me["result"].get("username") or "") + " | CROWN-WARS v6.46")
     def _bye(sg, fr):
         try:
             bdir = os.path.join(DATA, "backup"); os.makedirs(bdir, exist_ok=True)
